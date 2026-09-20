@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Sistem Keamanan Brankas</title>
+
+    <link
+        rel="stylesheet"
+        href="/style.css"
+    >
+
+</head>
+
+
+<body>
+
+    <div class="container">
+
+        <div class="card">
+
+            <!-- HEADER -->
+
+            <div class="header">
+
+                <div class="icon">
+                    🔐
+                </div>
+
+                <h1>
+                    SISTEM BRANKAS
+                </h1>
+
+                <p>
+                    Sistem Keamanan Brankas
+                </p>
+
+            </div>
+
+
+            <!-- STATUS BRANKAS -->
+
+            <div class="lock-status">
+
+                <div
+                    id="lockIcon"
+                    class="lock-icon"
+                >
+                    🔒
+                </div>
+
+                <div>
+
+                    <span>
+                        STATUS BRANKAS
+                    </span>
+
+                    <h2 id="status">
+                        TERKUNCI
+                    </h2>
+
+                </div>
+
+            </div>
+
+
+            <!-- KODE RAHASIA -->
+
+            <div class="secret-box">
+
+                <div class="secret-icon">
+                    🔑
+                </div>
+
+                <h2>
+                    Kode Brankas
+                </h2>
+
+                <p>
+                    Kode bersifat rahasia dan
+                    tidak ditampilkan pada sistem.
+                </p>
+
+                <p>
+                    Masukkan kode yang Anda miliki
+                    untuk membuka brankas.
+                </p>
+
+            </div>
+
+
+            <!-- FORM BUKA BRANKAS -->
+
+            <div class="section">
+
+                <h2>
+                    🔑 Buka Brankas
+                </h2>
+
+                <input
+                    type="text"
+                    id="inputKode"
+                    maxlength="6"
+                    inputmode="numeric"
+                    placeholder="Masukkan kode 6 digit"
+                    autocomplete="off"
+                >
+
+                <button
+                    onclick="bukaBrankas()"
+                >
+                    BUKA BRANKAS
+                </button>
+
+                <div
+                    id="hasil"
+                    class="hasil"
+                ></div>
+
+            </div>
+
+
+            <!-- INFORMASI KEAMANAN -->
+
+            <div class="information">
+
+                <strong>
+                    ⚠️ Informasi Keamanan
+                </strong>
+
+                <p>
+                    Pastikan kode yang dimasukkan
+                    merupakan kode yang valid
+                    untuk membuka brankas.
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script>
+
+        // =================================================
+        // SERVER
+        //
+        // Tidak menggunakan localhost.
+        // Frontend dan Java berada pada domain Vercel
+        // yang sama.
+        // =================================================
+
+        const JAVA_SERVER = "";
+
+
+        // =================================================
+        // UPDATE STATUS
+        // =================================================
+
+        function updateStatus() {
+
+            fetch(
+                JAVA_SERVER + "/status"
+            )
+
+            .then(
+                response => {
+
+                    if (!response.ok) {
+
+                        throw new Error(
+                            "Server error"
+                        );
+
+                    }
+
+                    return response.json();
+
+                }
+            )
+
+            .then(
+                data => {
+
+                    const status =
+                        document.getElementById(
+                            "status"
+                        );
+
+
+                    const icon =
+                        document.getElementById(
+                            "lockIcon"
+                        );
+
+
+                    status.textContent =
+                        data.status;
+
+
+                    if (
+                        data.status ===
+                        "TERBUKA"
+                    ) {
+
+                        icon.textContent =
+                            "🔓";
+
+                        icon.classList.add(
+                            "open"
+                        );
+
+                    }
+
+                    else {
+
+                        icon.textContent =
+                            "🔒";
+
+                        icon.classList.remove(
+                            "open"
+                        );
+
+                    }
+
+                }
+            )
+
+            .catch(
+                error => {
+
+                    console.log(
+                        "Server tidak dapat dihubungi:",
+                        error
+                    );
+
+                }
+            );
+
+        }
+
+
+        // =================================================
+        // MEMBUKA BRANKAS
+        // =================================================
+
+        function bukaBrankas() {
+
+            const input =
+                document.getElementById(
+                    "inputKode"
+                );
+
+
+            const kode =
+                input.value.trim();
+
+
+            const hasil =
+                document.getElementById(
+                    "hasil"
+                );
+
+
+            // =================================================
+            // VALIDASI PANJANG
+            // =================================================
+
+            if (
+                kode.length !== 6
+            ) {
+
+                hasil.textContent =
+                    "Masukkan kode 6 digit.";
+
+                hasil.className =
+                    "hasil gagal";
+
+                return;
+
+            }
+
+
+            // =================================================
+            // VALIDASI ANGKA
+            // =================================================
+
+            if (
+                !/^[0-9]+$/.test(
+                    kode
+                )
+            ) {
+
+                hasil.textContent =
+                    "Kode hanya boleh berisi angka.";
+
+                hasil.className =
+                    "hasil gagal";
+
+                return;
+
+            }
+
+
+            // =================================================
+            // KIRIM KE JAVA
+            // =================================================
+
+            fetch(
+                JAVA_SERVER
+                + "/buka?kode="
+                + encodeURIComponent(
+                    kode
+                )
+            )
+
+            .then(
+                response => {
+
+                    if (!response.ok) {
+
+                        throw new Error(
+                            "Server error"
+                        );
+
+                    }
+
+                    return response.json();
+
+                }
+            )
+
+            .then(
+                data => {
+
+                    hasil.textContent =
+                        data.message;
+
+
+                    if (
+                        data.status ===
+                        "success"
+                    ) {
+
+                        hasil.className =
+                            "hasil berhasil";
+
+                    }
+
+                    else {
+
+                        hasil.className =
+                            "hasil gagal";
+
+                    }
+
+
+                    updateStatus();
+
+                }
+            )
+
+            .catch(
+                error => {
+
+                    console.error(
+                        error
+                    );
+
+
+                    hasil.textContent =
+                        "Server tidak dapat dihubungi.";
+
+                    hasil.className =
+                        "hasil gagal";
+
+                }
+            );
+
+        }
+
+
+        // =================================================
+        // ENTER UNTUK MEMBUKA
+        // =================================================
+
+        document
+            .getElementById(
+                "inputKode"
+            )
+            .addEventListener(
+                "keydown",
+                function(event) {
+
+                    if (
+                        event.key ===
+                        "Enter"
+                    ) {
+
+                        bukaBrankas();
+
+                    }
+
+                }
+            );
+
+
+        // =================================================
+        // CEK STATUS SAAT HALAMAN DIBUKA
+        // =================================================
+
+        updateStatus();
+
+
+        // =================================================
+        // UPDATE STATUS
+        //
+        // Tidak menampilkan:
+        // - kode
+        // - countdown
+        // - waktu pergantian
+        // =================================================
+
+        setInterval(
+            updateStatus,
+            3000
+        );
+
+    </script>
+
+</body>
+
+</html>
