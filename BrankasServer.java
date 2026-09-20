@@ -612,7 +612,7 @@ public class BrankasServer {
         } else {
 
             System.out.println(
-                    "\nKode salah."
+                    "\nAkses tidak dapat dilakukan."
             );
 
 
