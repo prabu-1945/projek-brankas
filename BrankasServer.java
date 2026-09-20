@@ -1,1060 +1,461 @@
-import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.*;
 import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.util.concurrent.Executors;
 
 public class BrankasServer {
 
-    // =====================================================
-    // KONFIGURASI
-    // =====================================================
-
-    static final long WAKTU_PERUBAHAN = 60;
-
-    static final String SECRET =
-        System.getenv().getOrDefault(
-            "BRANKAS_SECRET",
-            "SANG_PRABU_BRANKAS_SECRET_2026"
-        );
-
-
-    // =====================================================
-    // CLASS BRANKAS
-    // =====================================================
-
+    // =========================
+    // CLASS DASAR BRANKAS
+    // =========================
     static class Brankas {
 
         protected String kode;
 
         public Brankas() {
-
             kode = generateKode();
-
         }
 
-
-        // =================================================
-        // METHOD YANG AKAN DI-OVERRIDE
-        // =================================================
-
+        // Method yang akan dioverride
         public String generateKode() {
-
             return "000000";
-
         }
 
-
-        // =================================================
-        // MEMBUKA BRANKAS
-        // =================================================
-
-        public boolean bukaBrankas(
-            String kodeMasuk
-        ) {
-
+        public boolean bukaBrankas(String kodeMasuk) {
             return kode.equals(kodeMasuk);
-
         }
-
-
-        // =================================================
-        // MENGAMBIL KODE
-        // =================================================
 
         public String getKode() {
-
             return kode;
-
         }
-
-
-        // =================================================
-        // MENGUBAH KODE
-        // =================================================
 
         public void ubahKode() {
-
             kode = generateKode();
-
         }
-
     }
 
 
-    // =====================================================
-    // CLASS TURUNAN
-    // METHOD OVERRIDING
-    // =====================================================
+    // =========================
+    // SUBCLASS
+    // =========================
+    static class BrankasKeamanan extends Brankas {
 
-    static class BrankasKeamanan
-        extends Brankas {
+        private static final String SECRET =
+                System.getenv().getOrDefault(
+                        "BRANKAS_SECRET",
+                        "SANG_PRABU_BRANKAS_SECRET_2026"
+                );
 
-        private long periodeAktif =
-            -1;
-
+        private static final long WAKTU_PERUBAHAN = 60;
 
         @Override
         public String generateKode() {
 
             long periode =
-                System.currentTimeMillis()
-                / (WAKTU_PERUBAHAN * 1000L);
+                    System.currentTimeMillis() / 1000 / WAKTU_PERUBAHAN;
 
-            return generateKodeUntukPeriode(
-                periode
-            );
-
-        }
-
-
-        // =================================================
-        // MEMBUAT KODE BERDASARKAN PERIODE WAKTU
-        // =================================================
-
-        private String generateKodeUntukPeriode(
-            long periode
-        ) {
+            String input = SECRET + ":" + periode;
 
             try {
 
-                String data =
-                    SECRET
-                    + ":"
-                    + periode;
+                MessageDigest md =
+                        MessageDigest.getInstance("SHA-256");
 
-                MessageDigest digest =
-                    MessageDigest.getInstance(
-                        "SHA-256"
-                    );
-
-                byte[] hash =
-                    digest.digest(
-                        data.getBytes(
-                            StandardCharsets.UTF_8
-                        )
-                    );
-
+                byte[] hasil =
+                        md.digest(input.getBytes(StandardCharsets.UTF_8));
 
                 long angka = 0;
 
-                for (
-                    int i = 0;
-                    i < 4;
-                    i++
-                ) {
-
-                    angka =
-                        (angka << 8)
-                        | (
-                            hash[i]
-                            & 0xff
-                        );
-
+                for (int i = 0; i < 4; i++) {
+                    angka = (angka << 8) | (hasil[i] & 0xff);
                 }
 
+                angka = Math.abs(angka);
 
-                angka =
-                    angka % 1000000;
+                return String.format("%06d", angka % 1000000);
 
-
-                if (angka < 0) {
-
-                    angka =
-                        -angka;
-
-                }
-
-
-                return String.format(
-                    "%06d",
-                    angka
-                );
-
-            }
-
-            catch (
-                Exception e
-            ) {
-
+            } catch (Exception e) {
                 return "000000";
-
             }
-
         }
 
-
-        // =================================================
-        // MEMASTIKAN KODE SESUAI PERIODE SEKARANG
-        // =================================================
-
-        public synchronized void perbaruiKodeJikaPerlu() {
-
-            long periodeSekarang =
-                System.currentTimeMillis()
-                / (WAKTU_PERUBAHAN * 1000L);
-
-
-            if (
-                periodeSekarang
-                != periodeAktif
-            ) {
-
-                periodeAktif =
-                    periodeSekarang;
-
-                kode =
-                    generateKodeUntukPeriode(
-                        periodeSekarang
-                    );
-
-            }
-
+        public String getKodeAktif() {
+            return generateKode();
         }
 
+        @Override
+        public boolean bukaBrankas(String kodeMasuk) {
+
+            String kodeAktif = getKodeAktif();
+
+            return kodeAktif.equals(kodeMasuk);
+        }
     }
 
 
-    // =====================================================
-    // CLASS PEMEGANG KODE
-    //
-    // Tetap ada untuk kebutuhan konsep OOP.
-    // Tidak ditampilkan di website.
-    // =====================================================
-
+    // =========================
+    // PEMEGANG KODE
+    // =========================
     static class PemegangKode {
 
         private String nama;
 
-
-        public PemegangKode(
-            String nama
-        ) {
-
-            this.nama =
-                nama;
-
+        public PemegangKode(String nama) {
+            this.nama = nama;
         }
-
 
         public String getNama() {
-
             return nama;
-
         }
-
     }
 
 
-    // =====================================================
-    // OBJECT BRANKAS
-    // =====================================================
-
+    // =========================
+    // OBJECT
+    // =========================
     static BrankasKeamanan brankas =
-        new BrankasKeamanan();
-
-
-    // =====================================================
-    // OBJECT PEMEGANG KODE
-    // =====================================================
+            new BrankasKeamanan();
 
     static PemegangKode pemegang1 =
-        new PemegangKode(
-            "Pemegang Kode 1"
-        );
-
+            new PemegangKode("Pemegang Kode 1");
 
     static PemegangKode pemegang2 =
-        new PemegangKode(
-            "Pemegang Kode 2"
-        );
+            new PemegangKode("Pemegang Kode 2");
 
 
-    // =====================================================
-    // STATUS BRANKAS
-    // =====================================================
-
-    static boolean brankasTerbuka =
-        false;
-
-
-    static long periodeTerakhir =
-        -1;
-
-
-    // =====================================================
+    // =========================
     // MAIN
-    // =====================================================
+    // =========================
+    public static void main(String[] args) throws Exception {
 
-    public static void main(
-        String[] args
-    ) throws Exception {
+        int port = 80;
 
+        String portEnv = System.getenv("PORT");
 
-        // =================================================
-        // PORT VERCEL
-        // =================================================
-
-        int port =
-            Integer.parseInt(
-                System.getenv()
-                    .getOrDefault(
-                        "PORT",
-                        "8081"
-                    )
-            );
-
-
-        // =================================================
-        // MEMBUAT SERVER
-        // =================================================
+        if (portEnv != null) {
+            try {
+                port = Integer.parseInt(portEnv);
+            } catch (NumberFormatException e) {
+                port = 80;
+            }
+        }
 
         HttpServer server =
-            HttpServer.create(
-                new InetSocketAddress(
-                    "0.0.0.0",
-                    port
-                ),
-                0
-            );
+                HttpServer.create(
+                        new InetSocketAddress("0.0.0.0", port),
+                        0
+                );
 
-
-        // =================================================
-        // HALAMAN UTAMA
-        // =================================================
+        server.createContext("/", BrankasServer::handleHome);
 
         server.createContext(
-            "/",
-            BrankasServer::handleHome
+                "/style.css",
+                BrankasServer::handleCSS
         );
-
-
-        // =================================================
-        // FILE CSS
-        // =================================================
 
         server.createContext(
-            "/style.css",
-            BrankasServer::handleCSS
+                "/status",
+                BrankasServer::handleStatus
         );
-
-
-        // =================================================
-        // STATUS BRANKAS
-        // =================================================
 
         server.createContext(
-            "/status",
-            BrankasServer::handleStatus
+                "/buka",
+                BrankasServer::handleBuka
         );
-
-
-        // =================================================
-        // BUKA BRANKAS
-        // =================================================
-
-        server.createContext(
-            "/buka",
-            BrankasServer::handleBuka
-        );
-
-
-        // =================================================
-        // EXECUTOR
-        // =================================================
 
         server.setExecutor(
-            Executors.newCachedThreadPool()
+                Executors.newCachedThreadPool()
         );
-
-
-        // =================================================
-        // MENJALANKAN SERVER
-        // =================================================
 
         server.start();
 
+        System.out.println("=================================");
+        System.out.println("     SERVER BRANKAS ONLINE");
+        System.out.println("=================================");
+        System.out.println("Port : " + port);
+        System.out.println("Status : Server aktif");
+        System.out.println("Rotasi kode : 60 detik");
+        System.out.println("=================================");
 
-        // =================================================
-        // PASTIKAN KODE PERTAMA SUDAH TERSEDIA
-        // =================================================
-
-        brankas.perbaruiKodeJikaPerlu();
-
-
-        long periodeSekarang =
-            System.currentTimeMillis()
-            / (WAKTU_PERUBAHAN * 1000L);
-
-
-        periodeTerakhir =
-            periodeSekarang;
-
-
-        // =================================================
-        // LOG TERMINAL
-        // =================================================
-
-        System.out.println();
-
+        // Untuk pengujian melalui Vercel Logs
         System.out.println(
-            "=========================================="
+                "Kode aktif: " + brankas.getKodeAktif()
         );
-
-        System.out.println(
-            "        SISTEM KEAMANAN BRANKAS"
-        );
-
-        System.out.println(
-            "=========================================="
-        );
-
-        System.out.println();
-
-        System.out.println(
-            "Java Brankas Server ONLINE"
-        );
-
-        System.out.println(
-            "Port: "
-            + port
-        );
-
-        System.out.println();
-
-        System.out.println(
-            "Pemegang kode:"
-        );
-
-        System.out.println(
-            "- "
-            + pemegang1.getNama()
-        );
-
-        System.out.println(
-            "- "
-            + pemegang2.getNama()
-        );
-
-        System.out.println();
-
-        System.out.println(
-            "Kode aktif untuk pengujian: "
-            + brankas.getKode()
-        );
-
-        System.out.println();
-
-        System.out.println(
-            "Pergantian kode setiap "
-            + WAKTU_PERUBAHAN
-            + " detik."
-        );
-
-        System.out.println();
-
-        System.out.println(
-            "=========================================="
-        );
-
-
-        // =================================================
-        // THREAD LOG PERGANTIAN KODE
-        //
-        // Hanya untuk log/demo ketika container aktif.
-        // Pergantian kode sebenarnya tidak bergantung
-        // pada thread ini.
-        // =================================================
-
-        Thread monitorKode =
-            new Thread(() -> {
-
-                long periodeSebelumnya =
-                    periodeTerakhir;
-
-
-                while (true) {
-
-                    try {
-
-                        Thread.sleep(
-                            1000
-                        );
-
-
-                        long periodeSekarang2 =
-                            System.currentTimeMillis()
-                            / (
-                                WAKTU_PERUBAHAN
-                                * 1000L
-                            );
-
-
-                        if (
-                            periodeSekarang2
-                            != periodeSebelumnya
-                        ) {
-
-                            brankas
-                                .perbaruiKodeJikaPerlu();
-
-
-                            brankasTerbuka =
-                                false;
-
-
-                            System.out.println();
-
-                            System.out.println(
-                                "=========================================="
-                            );
-
-                            System.out.println(
-                                "        KODE BRANKAS BERUBAH!"
-                            );
-
-                            System.out.println(
-                                "=========================================="
-                            );
-
-                            System.out.println(
-                                "Kode baru: "
-                                + brankas.getKode()
-                            );
-
-                            System.out.println(
-                                "Brankas kembali TERKUNCI."
-                            );
-
-                            System.out.println(
-                                "=========================================="
-                            );
-
-
-                            periodeSebelumnya =
-                                periodeSekarang2;
-
-                        }
-
-                    }
-
-                    catch (
-                        InterruptedException e
-                    ) {
-
-                        break;
-
-                    }
-
-                }
-
-            });
-
-
-        monitorKode.setDaemon(
-            true
-        );
-
-
-        monitorKode.start();
-
     }
 
 
-    // =====================================================
+    // =========================
     // HALAMAN UTAMA
-    // =====================================================
+    // =========================
+    static void handleHome(HttpExchange exchange)
+            throws IOException {
 
-    static void handleHome(
-        HttpExchange exchange
-    ) throws IOException {
+        String path = exchange.getRequestURI().getPath();
 
+        if (!path.equals("/")) {
+            sendResponse(
+                    exchange,
+                    404,
+                    "text/plain",
+                    "404 - Halaman tidak ditemukan"
+            );
+            return;
+        }
 
-        if (
-            !exchange
-                .getRequestMethod()
-                .equalsIgnoreCase(
-                    "GET"
-                )
-        ) {
+        File file = new File("index.html");
 
-            kirimText(
-                exchange,
-                "Method tidak didukung.",
-                405,
-                "text/plain"
+        if (!file.exists()) {
+
+            sendResponse(
+                    exchange,
+                    404,
+                    "text/plain",
+                    "index.html tidak ditemukan"
             );
 
             return;
-
         }
-
-
-        Path file =
-            Paths.get(
-                "index.html"
-            );
-
-
-        if (
-            !Files.exists(file)
-        ) {
-
-            kirimText(
-                exchange,
-                "index.html tidak ditemukan.",
-                500,
-                "text/plain"
-            );
-
-            return;
-
-        }
-
 
         byte[] data =
-            Files.readAllBytes(
-                file
-            );
+                java.nio.file.Files.readAllBytes(
+                        file.toPath()
+                );
 
+        addCors(exchange);
 
-        Headers headers =
-            exchange
-                .getResponseHeaders();
-
-
-        headers.set(
-            "Content-Type",
-            "text/html; charset=UTF-8"
-        );
-
+        exchange.getResponseHeaders()
+                .set(
+                        "Content-Type",
+                        "text/html; charset=UTF-8"
+                );
 
         exchange.sendResponseHeaders(
-            200,
-            data.length
+                200,
+                data.length
         );
 
+        try (OutputStream os =
+                     exchange.getResponseBody()) {
 
-        OutputStream output =
-            exchange.getResponseBody();
-
-
-        output.write(
-            data
-        );
-
-
-        output.close();
-
+            os.write(data);
+        }
     }
 
 
-    // =====================================================
-    // FILE CSS
-    // =====================================================
+    // =========================
+    // CSS
+    // =========================
+    static void handleCSS(HttpExchange exchange)
+            throws IOException {
 
-    static void handleCSS(
-        HttpExchange exchange
-    ) throws IOException {
+        File file = new File("style.css");
 
+        if (!file.exists()) {
 
-        if (
-            !exchange
-                .getRequestMethod()
-                .equalsIgnoreCase(
-                    "GET"
-                )
-        ) {
-
-            kirimText(
-                exchange,
-                "Method tidak didukung.",
-                405,
-                "text/plain"
+            sendResponse(
+                    exchange,
+                    404,
+                    "text/plain",
+                    "style.css tidak ditemukan"
             );
 
             return;
-
         }
-
-
-        Path file =
-            Paths.get(
-                "style.css"
-            );
-
-
-        if (
-            !Files.exists(file)
-        ) {
-
-            kirimText(
-                exchange,
-                "style.css tidak ditemukan.",
-                500,
-                "text/plain"
-            );
-
-            return;
-
-        }
-
 
         byte[] data =
-            Files.readAllBytes(
-                file
-            );
+                java.nio.file.Files.readAllBytes(
+                        file.toPath()
+                );
 
+        addCors(exchange);
 
-        exchange
-            .getResponseHeaders()
-            .set(
-                "Content-Type",
-                "text/css; charset=UTF-8"
-            );
-
+        exchange.getResponseHeaders()
+                .set(
+                        "Content-Type",
+                        "text/css; charset=UTF-8"
+                );
 
         exchange.sendResponseHeaders(
-            200,
-            data.length
+                200,
+                data.length
         );
 
+        try (OutputStream os =
+                     exchange.getResponseBody()) {
 
-        OutputStream output =
-            exchange.getResponseBody();
-
-
-        output.write(
-            data
-        );
-
-
-        output.close();
-
+            os.write(data);
+        }
     }
 
 
-    // =====================================================
-    // ENDPOINT STATUS
-    // =====================================================
+    // =========================
+    // STATUS
+    // =========================
+    static void handleStatus(HttpExchange exchange)
+            throws IOException {
 
-    static void handleStatus(
-        HttpExchange exchange
-    ) throws IOException {
-
-
-        tambahCORS(
-            exchange
-        );
-
-
-        brankas
-            .perbaruiKodeJikaPerlu();
-
-
-        String status;
-
-
-        if (
-            brankasTerbuka
-        ) {
-
-            status =
-                "TERBUKA";
-
-        }
-
-        else {
-
-            status =
-                "TERKUNCI";
-
-        }
-
+        addCors(exchange);
 
         String response =
-            "{"
-            + "\"status\":\""
-            + status
-            + "\""
-            + "}";
+                "{"
+                        + "\"status\":\"TERKUNCI\","
+                        + "\"server\":\"ONLINE\""
+                        + "}";
 
-
-        kirimJSON(
-            exchange,
-            response
+        sendResponse(
+                exchange,
+                200,
+                "application/json",
+                response
         );
 
+        // Kode hanya dicetak di log server,
+        // tidak dikirim ke browser.
+        System.out.println(
+                "Kode aktif: " +
+                        brankas.getKodeAktif()
+        );
     }
 
 
-    // =====================================================
-    // ENDPOINT BUKA BRANKAS
-    // =====================================================
+    // =========================
+    // BUKA BRANKAS
+    // =========================
+    static void handleBuka(HttpExchange exchange)
+            throws IOException {
 
-    static void handleBuka(
-        HttpExchange exchange
-    ) throws IOException {
-
-
-        tambahCORS(
-            exchange
-        );
-
-
-        brankas
-            .perbaruiKodeJikaPerlu();
-
+        addCors(exchange);
 
         String query =
-            exchange
-                .getRequestURI()
-                .getQuery();
+                exchange.getRequestURI()
+                        .getRawQuery();
 
+        String kodeMasuk = "";
 
-        String kodeMasuk =
-            "";
+        if (query != null) {
 
+            String[] parameter =
+                    query.split("&");
 
-        if (
-            query != null
-            &&
-            query.startsWith(
-                "kode="
-            )
-        ) {
+            for (String p : parameter) {
 
-            kodeMasuk =
-                query.substring(
-                    5
-                );
+                String[] bagian =
+                        p.split("=", 2);
 
+                if (bagian.length == 2
+                        && bagian[0].equals("kode")) {
 
-            kodeMasuk =
-                URLDecoder.decode(
-                    kodeMasuk,
-                    StandardCharsets.UTF_8
-                );
-
+                    kodeMasuk =
+                            URLDecoder.decode(
+                                    bagian[1],
+                                    StandardCharsets.UTF_8
+                            );
+                }
+            }
         }
 
 
-        // =================================================
-        // LOG DI SERVER
-        // =================================================
-
-        System.out.println();
-
-        System.out.println(
-            "Percobaan membuka brankas."
-        );
-
-
-        // =================================================
-        // CEK KODE
-        // =================================================
-
-        boolean benar =
-            brankas.bukaBrankas(
-                kodeMasuk
-            );
-
-
-        String response;
-
-
-        if (
-            benar
-        ) {
-
-            brankasTerbuka =
-                true;
-
-
-            response =
-                "{"
-                + "\"status\":\"success\","
-                + "\"message\":"
-                + "\"Brankas berhasil dibuka!\""
-                + "}";
-
+        // Validasi
+        if (kodeMasuk.matches("\\d{6}")
+                && brankas.bukaBrankas(kodeMasuk)) {
 
             System.out.println(
-                "HASIL: Kode benar."
+                    "Percobaan buka: BERHASIL"
             );
 
+            sendResponse(
+                    exchange,
+                    200,
+                    "application/json",
+                    "{"
+                            + "\"berhasil\":true,"
+                            + "\"status\":\"TERBUKA\","
+                            + "\"pesan\":\"Kode benar. Brankas terbuka.\""
+                            + "}"
+            );
+
+        } else {
 
             System.out.println(
-                "STATUS: BRANKAS TERBUKA."
+                    "Percobaan buka: GAGAL"
             );
 
+            sendResponse(
+                    exchange,
+                    401,
+                    "application/json",
+                    "{"
+                            + "\"berhasil\":false,"
+                            + "\"status\":\"TERKUNCI\","
+                            + "\"pesan\":\"Kode salah.\""
+                            + "}"
+            );
         }
-
-        else {
-
-            brankasTerbuka =
-                false;
-
-
-            response =
-                "{"
-                + "\"status\":\"error\","
-                + "\"message\":"
-                + "\"Kode salah atau sudah tidak berlaku!\""
-                + "}";
-
-
-            System.out.println(
-                "HASIL: Kode salah."
-            );
-
-
-            System.out.println(
-                "STATUS: BRANKAS TETAP TERKUNCI."
-            );
-
-        }
-
-
-        kirimJSON(
-            exchange,
-            response
-        );
-
     }
 
 
-    // =====================================================
+    // =========================
     // CORS
-    // =====================================================
+    // =========================
+    static void addCors(
+            HttpExchange exchange) {
 
-    static void tambahCORS(
-        HttpExchange exchange
-    ) {
+        exchange.getResponseHeaders()
+                .set(
+                        "Access-Control-Allow-Origin",
+                        "*"
+                );
 
-        exchange
-            .getResponseHeaders()
-            .set(
-                "Access-Control-Allow-Origin",
-                "*"
-            );
+        exchange.getResponseHeaders()
+                .set(
+                        "Access-Control-Allow-Methods",
+                        "GET, OPTIONS"
+                );
 
-
-        exchange
-            .getResponseHeaders()
-            .set(
-                "Access-Control-Allow-Methods",
-                "GET, OPTIONS"
-            );
-
-
-        exchange
-            .getResponseHeaders()
-            .set(
-                "Access-Control-Allow-Headers",
-                "Content-Type"
-            );
-
+        exchange.getResponseHeaders()
+                .set(
+                        "Access-Control-Allow-Headers",
+                        "Content-Type"
+                );
     }
 
 
-    // =====================================================
-    // KIRIM JSON
-    // =====================================================
-
-    static void kirimJSON(
-        HttpExchange exchange,
-        String response
-    ) throws IOException {
-
+    // =========================
+    // RESPONSE
+    // =========================
+    static void sendResponse(
+            HttpExchange exchange,
+            int statusCode,
+            String contentType,
+            String response)
+            throws IOException {
 
         byte[] data =
-            response.getBytes(
-                StandardCharsets.UTF_8
-            );
+                response.getBytes(
+                        StandardCharsets.UTF_8
+                );
 
-
-        exchange
-            .getResponseHeaders()
-            .set(
-                "Content-Type",
-                "application/json; charset=UTF-8"
-            );
-
+        exchange.getResponseHeaders()
+                .set(
+                        "Content-Type",
+                        contentType
+                                + "; charset=UTF-8"
+                );
 
         exchange.sendResponseHeaders(
-            200,
-            data.length
+                statusCode,
+                data.length
         );
 
+        try (OutputStream os =
+                     exchange.getResponseBody()) {
 
-        OutputStream output =
-            exchange.getResponseBody();
-
-
-        output.write(
-            data
-        );
-
-
-        output.close();
-
+            os.write(data);
+        }
     }
-
-
-    // =====================================================
-    // KIRIM TEXT
-    // =====================================================
-
-    static void kirimText(
-        HttpExchange exchange,
-        String response,
-        int statusCode,
-        String contentType
-    ) throws IOException {
-
-
-        byte[] data =
-            response.getBytes(
-                StandardCharsets.UTF_8
-            );
-
-
-        exchange
-            .getResponseHeaders()
-            .set(
-                "Content-Type",
-                contentType
-                + "; charset=UTF-8"
-            );
-
-
-        exchange.sendResponseHeaders(
-            statusCode,
-            data.length
-        );
-
-
-        OutputStream output =
-            exchange.getResponseBody();
-
-
-        output.write(
-            data
-        );
-
-
-        output.close();
-
-    }
-
 }
