@@ -2,437 +2,167 @@
 <html lang="id">
 
 <head>
-
     <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <title>Brankas Digital</title>
 
-    <title>Sistem Keamanan Brankas</title>
-
-    <link
-        rel="stylesheet"
-        href="/style.css"
-    >
-
+    <link rel="stylesheet"
+          href="style.css">
 </head>
-
 
 <body>
 
     <div class="container">
 
-        <div class="card">
+        <div class="safe">
 
-            <!-- HEADER -->
+            <h1>🔐 BRANKAS DIGITAL</h1>
 
-            <div class="header">
+            <p class="subtitle">
+                Masukkan kode keamanan untuk membuka brankas
+            </p>
 
-                <div class="icon">
-                    🔐
-                </div>
-
-                <h1>
-                    SISTEM BRANKAS
-                </h1>
-
-                <p>
-                    Sistem Keamanan Brankas
-                </p>
-
+            <div class="lock"
+                 id="lock">
+                🔒
             </div>
 
-
-            <!-- STATUS BRANKAS -->
-
-            <div class="lock-status">
-
-                <div
-                    id="lockIcon"
-                    class="lock-icon"
-                >
-                    🔒
-                </div>
-
-                <div>
-
-                    <span>
-                        STATUS BRANKAS
-                    </span>
-
-                    <h2 id="status">
-                        TERKUNCI
-                    </h2>
-
-                </div>
-
+            <div class="status"
+                 id="status">
+                TERKUNCI
             </div>
 
+            <input
+                type="password"
+                id="kode"
+                maxlength="6"
+                inputmode="numeric"
+                placeholder="••••••"
+            >
 
-            <!-- KODE RAHASIA -->
+            <button onclick="bukaBrankas()">
+                BUKA BRANKAS
+            </button>
 
-            <div class="secret-box">
-
-                <div class="secret-icon">
-                    🔑
-                </div>
-
-                <h2>
-                    Kode Brankas
-                </h2>
-
-                <p>
-                    Kode bersifat rahasia dan
-                    tidak ditampilkan pada sistem.
-                </p>
-
-                <p>
-                    Masukkan kode yang Anda miliki
-                    untuk membuka brankas.
-                </p>
-
-            </div>
-
-
-            <!-- FORM BUKA BRANKAS -->
-
-            <div class="section">
-
-                <h2>
-                    🔑 Buka Brankas
-                </h2>
-
-                <input
-                    type="text"
-                    id="inputKode"
-                    maxlength="6"
-                    inputmode="numeric"
-                    placeholder="Masukkan kode 6 digit"
-                    autocomplete="off"
-                >
-
-                <button
-                    onclick="bukaBrankas()"
-                >
-                    BUKA BRANKAS
-                </button>
-
-                <div
-                    id="hasil"
-                    class="hasil"
-                ></div>
-
-            </div>
-
-
-            <!-- INFORMASI KEAMANAN -->
-
-            <div class="information">
-
-                <strong>
-                    ⚠️ Informasi Keamanan
-                </strong>
-
-                <p>
-                    Pastikan kode yang dimasukkan
-                    merupakan kode yang valid
-                    untuk membuka brankas.
-                </p>
-
-            </div>
+            <p id="pesan"></p>
 
         </div>
 
     </div>
 
-
     <script>
 
-        // =================================================
-        // SERVER
-        //
-        // Tidak menggunakan localhost.
-        // Frontend dan Java berada pada domain Vercel
-        // yang sama.
-        // =================================================
+        async function cekStatus() {
 
-        const JAVA_SERVER = "";
+            try {
 
+                const response =
+                    await fetch("/status");
 
-        // =================================================
-        // UPDATE STATUS
-        // =================================================
+                const data =
+                    await response.json();
 
-        function updateStatus() {
+                document.getElementById("status")
+                    .textContent = data.status;
 
-            fetch(
-                JAVA_SERVER + "/status"
-            )
+            } catch (error) {
 
-            .then(
-                response => {
-
-                    if (!response.ok) {
-
-                        throw new Error(
-                            "Server error"
-                        );
-
-                    }
-
-                    return response.json();
-
-                }
-            )
-
-            .then(
-                data => {
-
-                    const status =
-                        document.getElementById(
-                            "status"
-                        );
-
-
-                    const icon =
-                        document.getElementById(
-                            "lockIcon"
-                        );
-
-
-                    status.textContent =
-                        data.status;
-
-
-                    if (
-                        data.status ===
-                        "TERBUKA"
-                    ) {
-
-                        icon.textContent =
-                            "🔓";
-
-                        icon.classList.add(
-                            "open"
-                        );
-
-                    }
-
-                    else {
-
-                        icon.textContent =
-                            "🔒";
-
-                        icon.classList.remove(
-                            "open"
-                        );
-
-                    }
-
-                }
-            )
-
-            .catch(
-                error => {
-
-                    console.log(
-                        "Server tidak dapat dihubungi:",
-                        error
-                    );
-
-                }
-            );
-
+                document.getElementById("status")
+                    .textContent = "SERVER ERROR";
+            }
         }
 
 
-        // =================================================
-        // MEMBUKA BRANKAS
-        // =================================================
-
-        function bukaBrankas() {
-
-            const input =
-                document.getElementById(
-                    "inputKode"
-                );
-
+        async function bukaBrankas() {
 
             const kode =
-                input.value.trim();
+                document.getElementById("kode")
+                    .value;
+
+            const pesan =
+                document.getElementById("pesan");
+
+            const status =
+                document.getElementById("status");
+
+            const lock =
+                document.getElementById("lock");
 
 
-            const hasil =
-                document.getElementById(
-                    "hasil"
-                );
+            if (!/^\d{6}$/.test(kode)) {
 
-
-            // =================================================
-            // VALIDASI PANJANG
-            // =================================================
-
-            if (
-                kode.length !== 6
-            ) {
-
-                hasil.textContent =
-                    "Masukkan kode 6 digit.";
-
-                hasil.className =
-                    "hasil gagal";
+                pesan.textContent =
+                    "Kode harus terdiri dari 6 angka.";
 
                 return;
-
             }
 
 
-            // =================================================
-            // VALIDASI ANGKA
-            // =================================================
-
-            if (
-                !/^[0-9]+$/.test(
-                    kode
-                )
-            ) {
-
-                hasil.textContent =
-                    "Kode hanya boleh berisi angka.";
-
-                hasil.className =
-                    "hasil gagal";
-
-                return;
-
-            }
+            pesan.textContent =
+                "Memeriksa kode...";
 
 
-            // =================================================
-            // KIRIM KE JAVA
-            // =================================================
+            try {
 
-            fetch(
-                JAVA_SERVER
-                + "/buka?kode="
-                + encodeURIComponent(
-                    kode
-                )
-            )
-
-            .then(
-                response => {
-
-                    if (!response.ok) {
-
-                        throw new Error(
-                            "Server error"
-                        );
-
-                    }
-
-                    return response.json();
-
-                }
-            )
-
-            .then(
-                data => {
-
-                    hasil.textContent =
-                        data.message;
-
-
-                    if (
-                        data.status ===
-                        "success"
-                    ) {
-
-                        hasil.className =
-                            "hasil berhasil";
-
-                    }
-
-                    else {
-
-                        hasil.className =
-                            "hasil gagal";
-
-                    }
-
-
-                    updateStatus();
-
-                }
-            )
-
-            .catch(
-                error => {
-
-                    console.error(
-                        error
+                const response =
+                    await fetch(
+                        "/buka?kode=" +
+                        encodeURIComponent(kode)
                     );
 
+                const data =
+                    await response.json();
 
-                    hasil.textContent =
-                        "Server tidak dapat dihubungi.";
 
-                    hasil.className =
-                        "hasil gagal";
+                if (data.berhasil) {
 
+                    status.textContent =
+                        "TERBUKA";
+
+                    lock.textContent =
+                        "🔓";
+
+                    pesan.textContent =
+                        "Brankas berhasil dibuka.";
+
+                } else {
+
+                    status.textContent =
+                        "TERKUNCI";
+
+                    lock.textContent =
+                        "🔒";
+
+                    pesan.textContent =
+                        "Kode salah.";
                 }
-            );
 
+
+            } catch (error) {
+
+                pesan.textContent =
+                    "Server tidak dapat dihubungi.";
+            }
         }
 
 
-        // =================================================
-        // ENTER UNTUK MEMBUKA
-        // =================================================
-
         document
-            .getElementById(
-                "inputKode"
-            )
+            .getElementById("kode")
             .addEventListener(
-                "keydown",
+                "keypress",
                 function(event) {
 
-                    if (
-                        event.key ===
-                        "Enter"
-                    ) {
-
+                    if (event.key === "Enter") {
                         bukaBrankas();
-
                     }
 
                 }
             );
 
 
-        // =================================================
-        // CEK STATUS SAAT HALAMAN DIBUKA
-        // =================================================
-
-        updateStatus();
-
-
-        // =================================================
-        // UPDATE STATUS
-        //
-        // Tidak menampilkan:
-        // - kode
-        // - countdown
-        // - waktu pergantian
-        // =================================================
-
-        setInterval(
-            updateStatus,
-            3000
-        );
+        cekStatus();
 
     </script>
 
